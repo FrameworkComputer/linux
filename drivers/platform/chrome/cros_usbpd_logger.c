@@ -207,6 +207,11 @@ static int cros_usbpd_logger_probe(struct platform_device *pd)
 	logger->dev = dev;
 	logger->ec_dev = ec_dev;
 
+	if (-EOPNOTSUPP == PTR_ERR(ec_get_log_entry(logger))) {
+		dev_info(dev, "host command not supported.\n");
+		return -ENODEV;
+	}
+
 	platform_set_drvdata(pd, logger);
 
 	/* Retrieve PD event logs periodically */
