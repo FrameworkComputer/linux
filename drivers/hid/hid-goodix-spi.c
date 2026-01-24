@@ -653,7 +653,7 @@ static int goodix_hid_init(struct goodix_ts_data *ts)
 	hid->bus = BUS_SPI;
 	hid->dev.parent = &ts->spi->dev;
 
-	hid->version = le16_to_cpu(ts->hid_desc.bcd_version);
+	hid->version = le16_to_cpu(ts->hid_desc.version_id);
 	hid->vendor = le16_to_cpu(ts->hid_desc.vendor_id);
 	hid->product = le16_to_cpu(ts->hid_desc.product_id);
 	snprintf(hid->name, sizeof(hid->name), "%s %04X:%04X", "hid-gdix",
