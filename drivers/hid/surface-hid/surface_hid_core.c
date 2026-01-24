@@ -206,7 +206,7 @@ int surface_hid_device_add(struct surface_hid_device *shid)
 	shid->hid->bus = BUS_HOST;
 	shid->hid->vendor = get_unaligned_le16(&shid->attrs.vendor);
 	shid->hid->product = get_unaligned_le16(&shid->attrs.product);
-	shid->hid->version = get_unaligned_le16(&shid->hid_desc.hid_version);
+	shid->hid->version = get_unaligned_le16(&shid->attrs.version);
 	shid->hid->country = shid->hid_desc.country_code;
 
 	snprintf(shid->hid->name, sizeof(shid->hid->name), "Microsoft Surface %04X:%04X",
