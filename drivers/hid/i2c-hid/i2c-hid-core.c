@@ -1056,7 +1056,7 @@ static int __i2c_hid_core_probe(struct i2c_hid *ihid)
 		return ret;
 	}
 
-	hid->version = le16_to_cpu(ihid->hdesc.bcdVersion);
+	hid->version = le16_to_cpu(ihid->hdesc.wVersionID);
 	hid->vendor = le16_to_cpu(ihid->hdesc.wVendorID);
 	hid->product = le16_to_cpu(ihid->hdesc.wProductID);
 
