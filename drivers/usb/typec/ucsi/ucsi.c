@@ -143,7 +143,7 @@ static int ucsi_run_command(struct ucsi *ucsi, u64 command, u32 *cci,
 	return err ?: UCSI_CCI_LENGTH(*cci);
 }
 
-static int ucsi_read_error(struct ucsi *ucsi, u8 connector_num)
+static int ucsi_read_error(struct ucsi *ucsi, u64 orig_cmd, u8 connector_num)
 {
 	u64 command;
 	u16 error;
@@ -192,6 +192,23 @@ static int ucsi_read_error(struct ucsi *ucsi, u8 connector_num)
 		dev_warn(ucsi->dev, "Set Sink Path rejected\n");
 		break;
 	case UCSI_ERROR_UNDEFINED:
+		/*
+		 * The PD controller returns UNDEFINED when querying alternate
+		 * modes for passive cables (which lack the electronics to
+		 * respond to SOP'/SOP'' messages). This is expected and not
+		 * a real error.
+		 */
+		if (UCSI_COMMAND(orig_cmd) == UCSI_GET_ALTERNATE_MODES) {
+			u8 recipient = UCSI_ALTMODE_RECIPIENT(orig_cmd);
+
+			if (recipient == UCSI_RECIPIENT_SOP_P ||
+			    recipient == UCSI_RECIPIENT_SOP_PP) {
+				dev_dbg(ucsi->dev,
+					"cable does not support alternate modes\n");
+				break;
+			}
+		}
+		fallthrough;
 	default:
 		dev_err(ucsi->dev, "unknown error %u\n", error);
 		break;
@@ -232,7 +249,7 @@ static int ucsi_send_command_common(struct ucsi *ucsi, u64 cmd,
 	ret = ucsi_run_command(ucsi, cmd, &cci, data, size, conn_ack);
 
 	if (cci & UCSI_CCI_ERROR)
-		ret = ucsi_read_error(ucsi, connector_num);
+		ret = ucsi_read_error(ucsi, cmd, connector_num);
 
 	mutex_unlock(&ucsi->ppm_lock);
 	return ret;
