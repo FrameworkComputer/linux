@@ -166,7 +166,7 @@ static int ucsi_run_command(struct ucsi *ucsi, u64 command, u32 *cci,
 	return err ?: UCSI_CCI_LENGTH(*cci);
 }
 
-static int ucsi_read_error(struct ucsi *ucsi, u8 connector_num)
+static int ucsi_read_error(struct ucsi *ucsi, u64 cmd, u8 connector_num)
 {
 	u64 command;
 	u16 error;
@@ -216,6 +216,25 @@ static int ucsi_read_error(struct ucsi *ucsi, u8 connector_num)
 		dev_warn(ucsi->dev, "Set Sink Path rejected\n");
 		break;
 	case UCSI_ERROR_UNDEFINED:
+		/*
+		 * Some PPMs (e.g. Cypress/Infineon CCGx) report this error when
+		 * the requested information does not exist: there is no
+		 * e-marked cable, the cable plug or partner has no alternate
+		 * modes, or the offset is past the last alternate mode.
+		 * Callers of these commands treat -ENODATA as an empty result.
+		 */
+		switch (UCSI_COMMAND(cmd)) {
+		case UCSI_GET_ALTERNATE_MODES:
+		case UCSI_GET_CABLE_PROPERTY:
+			dev_dbg(ucsi->dev, "command 0x%02llx: no data\n",
+				UCSI_COMMAND(cmd));
+			return -ENODATA;
+		default:
+			dev_err(ucsi->dev, "command 0x%02llx: undefined error\n",
+				UCSI_COMMAND(cmd));
+			break;
+		}
+		break;
 	default:
 		dev_err(ucsi->dev, "unknown error %u\n", error);
 		break;
@@ -258,7 +277,7 @@ static int ucsi_send_command_common(struct ucsi *ucsi, u64 cmd,
 			       msg_out, msg_out_size, conn_ack);
 
 	if (cci & UCSI_CCI_ERROR)
-		ret = ucsi_read_error(ucsi, connector_num);
+		ret = ucsi_read_error(ucsi, cmd, connector_num);
 
 	trace_ucsi_run_command(cmd, ret);
 
@@ -687,7 +706,10 @@ ucsi_register_altmodes_nvidia(struct ucsi_connector *con, u8 recipient)
 		 * We are collecting all altmodes first and then registering.
 		 * Some type-C device will return zero length data beyond last
 		 * alternate modes. We should not return if length is zero.
+		 * Some PPMs report -ENODATA instead.
 		 */
+		if (len == -ENODATA)
+			break;
 		if (len < 0)
 			return len;
 
@@ -767,6 +789,9 @@ static int ucsi_register_altmodes(struct ucsi_connector *con, u8 recipient)
 		len = ucsi_send_command(con->ucsi, command, alt, sizeof(alt));
 		if (len == -EBUSY)
 			continue;
+		/* No (more) alternate modes */
+		if (len == -ENODATA)
+			return 0;
 		if (len <= 0)
 			return len;
 
@@ -1132,7 +1157,8 @@ static int ucsi_register_cable(struct ucsi_connector *con)
 	command = UCSI_GET_CABLE_PROPERTY | UCSI_CONNECTOR_NUMBER(con->num);
 	ret = ucsi_send_command(con->ucsi, command, &cable_prop, sizeof(cable_prop));
 	if (ret < 0) {
-		dev_err(con->ucsi->dev, "GET_CABLE_PROPERTY failed (%d)\n", ret);
+		if (ret != -ENODATA)
+			dev_err(con->ucsi->dev, "GET_CABLE_PROPERTY failed (%d)\n", ret);
 		return ret;
 	}
 
@@ -1413,6 +1439,9 @@ static int ucsi_check_cable(struct ucsi_connector *con)
 		return 0;
 
 	ret = ucsi_register_cable(con);
+	/* No cable information, e.g. the cable is not e-marked */
+	if (ret == -ENODATA)
+		return 0;
 	if (ret < 0)
 		return ret;
 
