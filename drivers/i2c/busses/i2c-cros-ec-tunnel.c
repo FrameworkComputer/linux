@@ -239,6 +239,21 @@ static const struct i2c_algorithm ec_i2c_algorithm = {
 	.functionality = ec_i2c_functionality,
 };
 
+static ssize_t remote_bus_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct ec_i2c_device *bus = platform_get_drvdata(to_platform_device(dev));
+
+	return sysfs_emit(buf, "%u\n", bus->remote_bus);
+}
+static DEVICE_ATTR_RO(remote_bus);
+
+static struct attribute *ec_i2c_attrs[] = {
+	&dev_attr_remote_bus.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(ec_i2c);
+
 static int ec_i2c_probe(struct platform_device *pdev)
 {
 	struct cros_ec_device *ec = dev_get_drvdata(pdev->dev.parent);
@@ -312,6 +327,7 @@ static struct platform_driver ec_i2c_tunnel_driver = {
 		.name = "cros-ec-i2c-tunnel",
 		.acpi_match_table = ACPI_PTR(cros_ec_i2c_tunnel_acpi_id),
 		.of_match_table = of_match_ptr(cros_ec_i2c_of_match),
+		.dev_groups = ec_i2c_groups,
 	},
 };
 
