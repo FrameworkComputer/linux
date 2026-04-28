@@ -7,3 +7,47 @@ Description:	The integer value of this attribute corresponds to the
 		MT_QUIRKS_* in hid-multitouch.c).
 		When written this attribute change on the fly the quirks, then
 		the protocol to handle the device.
+
+What:		/sys/bus/{i2c,usb}/devices/.../<hid-bus>:<vendor-id>:<product-id>.<num>/click_force_level
+Date:		April 2026
+Contact:	linux-input@vger.kernel.org
+Description:	Click activation force preference for haptic touchpads that
+		expose a vendor-defined Digitizers usage 0xB0 feature in
+		grams. Reading returns the currently configured discrete
+		level. Writing a value within
+		[click_force_level_min, click_force_level_max] (commonly
+		1..3, mapping to firmware-specific gram thresholds) applies
+		the new preference and persists it across runtime
+		suspend/resume. This attribute is only present on devices
+		that expose the corresponding HID feature.
+
+What:		/sys/bus/{i2c,usb}/devices/.../<hid-bus>:<vendor-id>:<product-id>.<num>/click_force_level_min
+What:		/sys/bus/{i2c,usb}/devices/.../<hid-bus>:<vendor-id>:<product-id>.<num>/click_force_level_max
+Date:		April 2026
+Contact:	linux-input@vger.kernel.org
+Description:	Inclusive bounds of valid values that may be written to
+		click_force_level on this device. Read-only, fixed for the
+		lifetime of the device. Allows userspace to size a slider
+		without probing-and-checking errno.
+
+What:		/sys/bus/{i2c,usb}/devices/.../<hid-bus>:<vendor-id>:<product-id>.<num>/haptic_intensity
+Date:		April 2026
+Contact:	linux-input@vger.kernel.org
+Description:	Haptic actuator intensity preference (typically 0..100,
+		percent) for haptic touchpads that expose a standalone HID
+		Simple Haptic Controller Intensity feature - i.e. the
+		firmware autonomously generates click/release waveforms and
+		only accepts a strength preference. Writes are clamped to
+		[haptic_intensity_min, haptic_intensity_max]. Devices that
+		implement the full HID Haptic protocol with
+		AutoTrigger/ManualTrigger expose intensity as a per-effect
+		parameter via the FF_HAPTIC evdev API instead, and do not
+		present this attribute.
+
+What:		/sys/bus/{i2c,usb}/devices/.../<hid-bus>:<vendor-id>:<product-id>.<num>/haptic_intensity_min
+What:		/sys/bus/{i2c,usb}/devices/.../<hid-bus>:<vendor-id>:<product-id>.<num>/haptic_intensity_max
+Date:		April 2026
+Contact:	linux-input@vger.kernel.org
+Description:	Inclusive bounds of valid values that may be written to
+		haptic_intensity on this device. Read-only, fixed for the
+		lifetime of the device.

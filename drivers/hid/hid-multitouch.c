@@ -186,9 +186,41 @@ struct mt_device {
 	bool is_haptic_touchpad;	/* is this device a haptic touchpad? */
 	bool serial_maybe;	/* need to check for serial protocol */
 
+	/*
+	 * User-tunable feature-report preferences. Each *_field pointer is set
+	 * by mt_probe_user_prefs() once it has finalized which fields are
+	 * standalone preferences (rather than per-effect parameters owned by
+	 * hid-haptic). The cached_* values shadow the device state so they can
+	 * be reapplied after suspend/resume, when the device may forget them.
+	 */
+	struct hid_field *intensity_candidate_field;
+	unsigned int intensity_candidate_index;
+	struct hid_field *click_force_candidate_field;
+	unsigned int click_force_candidate_index;
+	struct hid_field *haptic_intensity_field;
+	unsigned int haptic_intensity_index;
+	struct hid_field *click_force_field;
+	unsigned int click_force_index;
+	s32 cached_haptic_intensity;
+	s32 cached_click_force;
+	s32 haptic_intensity_min;
+	s32 haptic_intensity_max;
+	s32 click_force_min;
+	s32 click_force_max;
+	bool have_haptic_intensity;
+	bool have_click_force;
+
 	struct list_head applications;
 	struct list_head reports;
 };
+
+/*
+ * Vendor-defined Digitizers usage 0xB0 used by some haptic touchpads (e.g.
+ * Pixart PIXA3854) to expose a click activation force preference: a small
+ * number of discrete levels mapped to physical force thresholds in grams.
+ * Not in the published HID Usage Tables.
+ */
+#define MT_HID_USAGE_CLICK_FORCE 0x000d00b0
 
 static void mt_post_parse_default_settings(struct mt_device *td,
 					   struct mt_application *app);
@@ -494,13 +526,179 @@ static ssize_t mt_set_quirks(struct device *dev,
 
 static DEVICE_ATTR(quirks, S_IWUSR | S_IRUGO, mt_show_quirks, mt_set_quirks);
 
+static ssize_t click_force_level_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+
+	if (!td->have_click_force)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", td->cached_click_force);
+}
+
+static ssize_t click_force_level_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+	struct hid_field *field;
+	int val;
+	int ret;
+
+	if (!td->have_click_force)
+		return -ENODEV;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val < td->click_force_min || val > td->click_force_max)
+		return -ERANGE;
+
+	field = td->click_force_field;
+	field->value[td->click_force_index] = val;
+	hid_hw_request(hdev, field->report, HID_REQ_SET_REPORT);
+	td->cached_click_force = val;
+
+	return count;
+}
+static DEVICE_ATTR_RW(click_force_level);
+
+static ssize_t click_force_level_min_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+
+	if (!td->have_click_force)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", td->click_force_min);
+}
+static DEVICE_ATTR_RO(click_force_level_min);
+
+static ssize_t click_force_level_max_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+
+	if (!td->have_click_force)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", td->click_force_max);
+}
+static DEVICE_ATTR_RO(click_force_level_max);
+
+static ssize_t haptic_intensity_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+
+	if (!td->have_haptic_intensity)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", td->cached_haptic_intensity);
+}
+
+static ssize_t haptic_intensity_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+	struct hid_field *field;
+	int val;
+	int ret;
+
+	if (!td->have_haptic_intensity)
+		return -ENODEV;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val < td->haptic_intensity_min || val > td->haptic_intensity_max)
+		return -ERANGE;
+
+	field = td->haptic_intensity_field;
+	field->value[td->haptic_intensity_index] = val;
+	hid_hw_request(hdev, field->report, HID_REQ_SET_REPORT);
+	td->cached_haptic_intensity = val;
+
+	return count;
+}
+static DEVICE_ATTR_RW(haptic_intensity);
+
+static ssize_t haptic_intensity_min_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+
+	if (!td->have_haptic_intensity)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", td->haptic_intensity_min);
+}
+static DEVICE_ATTR_RO(haptic_intensity_min);
+
+static ssize_t haptic_intensity_max_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+
+	if (!td->have_haptic_intensity)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d\n", td->haptic_intensity_max);
+}
+static DEVICE_ATTR_RO(haptic_intensity_max);
+
 static struct attribute *sysfs_attrs[] = {
 	&dev_attr_quirks.attr,
+	&dev_attr_click_force_level.attr,
+	&dev_attr_click_force_level_min.attr,
+	&dev_attr_click_force_level_max.attr,
+	&dev_attr_haptic_intensity.attr,
+	&dev_attr_haptic_intensity_min.attr,
+	&dev_attr_haptic_intensity_max.attr,
 	NULL
 };
 
+static umode_t mt_attr_is_visible(struct kobject *kobj, struct attribute *attr,
+				  int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct hid_device *hdev = to_hid_device(dev);
+	struct mt_device *td = hid_get_drvdata(hdev);
+
+	if ((attr == &dev_attr_click_force_level.attr ||
+	     attr == &dev_attr_click_force_level_min.attr ||
+	     attr == &dev_attr_click_force_level_max.attr) &&
+	    !td->have_click_force)
+		return 0;
+	if ((attr == &dev_attr_haptic_intensity.attr ||
+	     attr == &dev_attr_haptic_intensity_min.attr ||
+	     attr == &dev_attr_haptic_intensity_max.attr) &&
+	    !td->have_haptic_intensity)
+		return 0;
+
+	return attr->mode;
+}
+
 static const struct attribute_group mt_attribute_group = {
-	.attrs = sysfs_attrs
+	.attrs = sysfs_attrs,
+	.is_visible = mt_attr_is_visible,
 };
 
 static void mt_get_feature(struct hid_device *hdev, struct hid_report *report)
@@ -582,9 +780,92 @@ static void mt_feature_mapping(struct hid_device *hdev,
 		if (usage->usage_index == 0)
 			mt_get_feature(hdev, field->report);
 		break;
+	case HID_HP_INTENSITY:
+		/*
+		 * Stash the field. We can't decide yet whether this is a
+		 * standalone intensity preference or the per-effect intensity
+		 * parameter inside a manual-trigger report owned by hid-haptic
+		 * - the manual-trigger report is only known after input
+		 * mapping completes. mt_probe_user_prefs() resolves this once
+		 * hid_parse() has finished.
+		 */
+		if (usage->usage_index < field->report_count) {
+			td->intensity_candidate_field = field;
+			td->intensity_candidate_index = usage->usage_index;
+		}
+		break;
+	case MT_HID_USAGE_CLICK_FORCE:
+		/*
+		 * Match conservatively so we don't bind to other vendors that
+		 * happen to reuse Digitizers usage 0xB0: require the field to
+		 * be expressed in grams and to be a small set of discrete
+		 * levels.
+		 */
+		if (field->unit != HID_UNIT_GRAM)
+			break;
+		if (field->logical_minimum < 1 || field->logical_maximum > 8)
+			break;
+		if (usage->usage_index >= field->report_count)
+			break;
+		td->click_force_candidate_field = field;
+		td->click_force_candidate_index = usage->usage_index;
+		break;
 	}
 
 	hid_haptic_feature_mapping(hdev, td->haptic, field, usage);
+}
+
+static void mt_probe_user_prefs(struct hid_device *hdev)
+{
+	struct mt_device *td = hid_get_drvdata(hdev);
+	struct hid_field *f;
+
+	f = td->click_force_candidate_field;
+	if (f) {
+		mt_get_feature(hdev, f->report);
+		td->click_force_field = f;
+		td->click_force_index = td->click_force_candidate_index;
+		td->click_force_min = f->logical_minimum;
+		td->click_force_max = f->logical_maximum;
+		td->cached_click_force = f->value[td->click_force_index];
+		td->have_click_force = true;
+	}
+
+	/*
+	 * Only treat HID_HP_INTENSITY as a persistent preference if the report
+	 * containing it isn't the manual-trigger report owned by hid-haptic
+	 * (where intensity is a per-effect parameter set via FF_HAPTIC).
+	 */
+	f = td->intensity_candidate_field;
+	if (f && (!td->haptic ||
+		  td->haptic->manual_trigger_report != f->report)) {
+		mt_get_feature(hdev, f->report);
+		td->haptic_intensity_field = f;
+		td->haptic_intensity_index = td->intensity_candidate_index;
+		td->haptic_intensity_min = f->logical_minimum;
+		td->haptic_intensity_max = f->logical_maximum;
+		td->cached_haptic_intensity =
+			f->value[td->haptic_intensity_index];
+		td->have_haptic_intensity = true;
+	}
+}
+
+static void mt_restore_user_prefs(struct hid_device *hdev)
+{
+	struct mt_device *td = hid_get_drvdata(hdev);
+	struct hid_field *f;
+
+	if (td->have_click_force) {
+		f = td->click_force_field;
+		f->value[td->click_force_index] = td->cached_click_force;
+		hid_hw_request(hdev, f->report, HID_REQ_SET_REPORT);
+	}
+	if (td->have_haptic_intensity) {
+		f = td->haptic_intensity_field;
+		f->value[td->haptic_intensity_index] =
+			td->cached_haptic_intensity;
+		hid_hw_request(hdev, f->report, HID_REQ_SET_REPORT);
+	}
 }
 
 static void set_abs(struct input_dev *input, unsigned int code,
@@ -2029,6 +2310,8 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (ret)
 		return ret;
 
+	mt_probe_user_prefs(hdev);
+
 	ret = sysfs_create_group(&hdev->dev.kobj, &mt_attribute_group);
 	if (ret)
 		dev_warn(&hdev->dev, "Cannot allocate sysfs group for %s\n",
@@ -2068,6 +2351,7 @@ static int mt_reset_resume(struct hid_device *hdev)
 {
 	mt_release_contacts(hdev);
 	mt_set_modes(hdev, HID_LATENCY_NORMAL, TOUCHPAD_REPORT_ALL);
+	mt_restore_user_prefs(hdev);
 	return 0;
 }
 
@@ -2080,6 +2364,7 @@ static int mt_resume(struct hid_device *hdev)
 	hid_hw_idle(hdev, 0, 0, HID_REQ_SET_IDLE);
 
 	mt_set_modes(hdev, HID_LATENCY_NORMAL, TOUCHPAD_REPORT_ALL);
+	mt_restore_user_prefs(hdev);
 
 	return 0;
 }
