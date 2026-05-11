@@ -363,6 +363,16 @@ KernelVersion:	v5.9
 Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
 Description:	Holds retimer NVM version number. Format: %x.%x, major.minor.
 
+What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/nvm_authentic
+Date:		May 2026
+KernelVersion:	v6.16
+Contact:	Daniel Schaefer <dhs@frame.work>
+Description:	If the retimer NVM format exposes an "official" / authenticity
+		bit, this attribute returns "1" when the active NVM image is
+		officially signed and "0" otherwise. Returns -EOPNOTSUPP if
+		the retimer's NVM format does not carry this information, or
+		-EAGAIN before the NVM has been read.
+
 What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/vendor
 Date:		Oct 2020
 KernelVersion:	v5.9

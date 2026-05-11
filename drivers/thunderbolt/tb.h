@@ -32,6 +32,8 @@
  * @dev: Owner of the NVM
  * @major: Major version number of the active NVM portion
  * @minor: Minor version number of the active NVM portion
+ * @official: Whether the active NVM image is officially signed
+ * @official_valid: Whether @official was populated by the vendor reader
  * @id: Identifier used with both NVM portions
  * @active: Active portion NVMem device
  * @active_size: Size in bytes of the active NVM
@@ -53,6 +55,8 @@ struct tb_nvm {
 	struct device *dev;
 	u32 major;
 	u32 minor;
+	bool official;
+	bool official_valid;
 	int id;
 	struct nvmem_device *active;
 	size_t active_size;

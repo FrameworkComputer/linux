@@ -208,6 +208,11 @@ static int intel_retimer_nvm_version(struct tb_nvm *nvm)
 
 	nvm->major = (val >> 16) & 0xff;
 	nvm->minor = (val >> 8) & 0xff;
+	nvm->official = (val >> 15) & 0x01;
+	nvm->official_valid = true;
+
+	dev_dbg(nvm->dev, "retimer Id %d, Ver %u.%u official status: %d\n",
+		nvm->id, nvm->major, nvm->minor, nvm->official);
 
 	ret = tb_retimer_nvm_read(rt, INTEL_NVM_FLASH_SIZE, &val, sizeof(val));
 	if (ret)

@@ -333,6 +333,27 @@ static ssize_t nvm_version_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(nvm_version);
 
+static ssize_t nvm_authentic_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct tb_retimer *rt = tb_to_retimer(dev);
+	int ret;
+
+	if (!mutex_trylock(&rt->tb->lock))
+		return restart_syscall();
+
+	if (!rt->nvm)
+		ret = -EAGAIN;
+	else if (!rt->nvm->official_valid)
+		ret = -EOPNOTSUPP;
+	else
+		ret = sysfs_emit(buf, "%u\n", rt->nvm->official);
+
+	mutex_unlock(&rt->tb->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(nvm_authentic);
+
 static ssize_t vendor_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
@@ -349,7 +370,8 @@ static umode_t retimer_is_visible(struct kobject *kobj, struct attribute *attr,
 	struct tb_retimer *rt = tb_to_retimer(dev);
 
 	if (attr == &dev_attr_nvm_authenticate.attr ||
-	    attr == &dev_attr_nvm_version.attr)
+	    attr == &dev_attr_nvm_version.attr ||
+	    attr == &dev_attr_nvm_authentic.attr)
 		return rt->no_nvm_upgrade ? 0 : attr->mode;
 
 	return attr->mode;
@@ -358,6 +380,7 @@ static umode_t retimer_is_visible(struct kobject *kobj, struct attribute *attr,
 static struct attribute *retimer_attrs[] = {
 	&dev_attr_device.attr,
 	&dev_attr_nvm_authenticate.attr,
+	&dev_attr_nvm_authentic.attr,
 	&dev_attr_nvm_version.attr,
 	&dev_attr_vendor.attr,
 	NULL
