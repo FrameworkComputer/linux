@@ -162,6 +162,7 @@ soc_button_device_create(struct platform_device *pdev,
 	int invalid_acpi_index = -1;
 	int error, gpio, irq;
 	int n_buttons = 0;
+	bool have_deferred = false;
 
 	for (info = button_info; info->name; info++)
 		if (info->autorepeat == autorepeat)
@@ -189,17 +190,22 @@ soc_button_device_create(struct platform_device *pdev,
 			continue;
 
 		error = soc_button_lookup_gpio(&pdev->dev, info->acpi_index, &gpio, &irq);
+		if (error == -EPROBE_DEFER)
+			have_deferred = true;
 		if (error || irq < 0) {
 			/*
-			 * Skip GPIO if not present. Note we deliberately
-			 * ignore -EPROBE_DEFER errors here. On some devices
-			 * Intel is using so called virtual GPIOs which are not
-			 * GPIOs at all but some way for AML code to check some
-			 * random status bits without need a custom opregion.
-			 * In some cases the resources table we parse points to
-			 * such a virtual GPIO, since these are not real GPIOs
-			 * we do not have a driver for these so they will never
-			 * show up, therefore we ignore -EPROBE_DEFER.
+			 * Skip this button for now. On some devices Intel uses
+			 * so called virtual GPIOs which are not GPIOs at all but
+			 * some way for AML code to check some random status bits
+			 * without needing a custom opregion. We have no driver
+			 * for these, so they keep returning -EPROBE_DEFER and
+			 * would never show up. As long as at least one real
+			 * button is found we therefore skip the deferring ones,
+			 * treating them as virtual. Only when *no* button could
+			 * be created do we propagate -EPROBE_DEFER (see below),
+			 * so that a genuinely not-yet-probed GPIO controller
+			 * (e.g. pinctrl-intel-platform loading after us) is
+			 * retried instead of the device being dropped forever.
 			 */
 			continue;
 		}
@@ -225,7 +231,7 @@ soc_button_device_create(struct platform_device *pdev,
 	}
 
 	if (n_buttons == 0) {
-		error = -ENODEV;
+		error = have_deferred ? -EPROBE_DEFER : -ENODEV;
 		goto err_free_mem;
 	}
 
