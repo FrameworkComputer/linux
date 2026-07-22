@@ -549,6 +549,7 @@ static const struct soc_button_info soc_button_INT33D3[] = {
 
 static const struct soc_device_data soc_device_INT33D3 = {
 	.button_info = soc_button_INT33D3,
+	.allow_probe_defer = true,
 };
 
 /*
