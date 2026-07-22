@@ -35,6 +35,13 @@ struct soc_button_info {
 struct soc_device_data {
 	const struct soc_button_info *button_info;
 	int (*check)(struct device *dev);
+	/*
+	 * Set for devices whose GPIOs all come from a real GPIO controller
+	 * (i.e. no virtual GPIOs, see soc_button_device_create()) and which
+	 * therefore can safely ask to be re-probed if that controller has not
+	 * been bound yet.
+	 */
+	bool allow_probe_defer;
 };
 
 /*
@@ -152,7 +159,7 @@ static int soc_button_lookup_gpio(struct device *dev, int acpi_index,
 static struct platform_device *
 soc_button_device_create(struct platform_device *pdev,
 			 const struct soc_button_info *button_info,
-			 bool autorepeat)
+			 bool autorepeat, bool allow_probe_defer)
 {
 	const struct soc_button_info *info;
 	struct platform_device *pd;
@@ -162,6 +169,7 @@ soc_button_device_create(struct platform_device *pdev,
 	int invalid_acpi_index = -1;
 	int error, gpio, irq;
 	int n_buttons = 0;
+	bool have_deferred = false;
 
 	for (info = button_info; info->name; info++)
 		if (info->autorepeat == autorepeat)
@@ -189,6 +197,8 @@ soc_button_device_create(struct platform_device *pdev,
 			continue;
 
 		error = soc_button_lookup_gpio(&pdev->dev, info->acpi_index, &gpio, &irq);
+		if (allow_probe_defer && error == -EPROBE_DEFER)
+			have_deferred = true;
 		if (error || irq < 0) {
 			/*
 			 * Skip GPIO if not present. Note we deliberately
@@ -200,6 +210,15 @@ soc_button_device_create(struct platform_device *pdev,
 			 * such a virtual GPIO, since these are not real GPIOs
 			 * we do not have a driver for these so they will never
 			 * show up, therefore we ignore -EPROBE_DEFER.
+			 *
+			 * Devices which are known to only reference real GPIOs
+			 * set allow_probe_defer; for those we remember that a
+			 * lookup deferred (have_deferred) and, if no button could
+			 * be created at all, ask to be re-probed once the GPIO
+			 * controller shows up instead of giving up (see the
+			 * n_buttons == 0 handling below). This matters when the
+			 * pinctrl driver providing the GPIOs is a module loaded
+			 * after us.
 			 */
 			continue;
 		}
@@ -225,7 +244,7 @@ soc_button_device_create(struct platform_device *pdev,
 	}
 
 	if (n_buttons == 0) {
-		error = -ENODEV;
+		error = have_deferred ? -EPROBE_DEFER : -ENODEV;
 		goto err_free_mem;
 	}
 
@@ -434,6 +453,7 @@ static int soc_button_probe(struct platform_device *pdev)
 	const struct soc_button_info *button_info;
 	struct soc_button_data *priv;
 	struct platform_device *pd;
+	bool allow_probe_defer;
 	int i;
 	int error;
 
@@ -464,8 +484,11 @@ static int soc_button_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, priv);
 
+	allow_probe_defer = device_data && device_data->allow_probe_defer;
+
 	for (i = 0; i < BUTTON_TYPES; i++) {
-		pd = soc_button_device_create(pdev, button_info, i == 0);
+		pd = soc_button_device_create(pdev, button_info, i == 0,
+					      allow_probe_defer);
 		if (!IS_ERR(pd)) {
 			priv->children[i] = pd;
 			continue;
