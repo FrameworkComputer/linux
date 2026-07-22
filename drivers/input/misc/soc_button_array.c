@@ -466,16 +466,30 @@ static int soc_button_probe(struct platform_device *pdev)
 
 	for (i = 0; i < BUTTON_TYPES; i++) {
 		pd = soc_button_device_create(pdev, button_info, i == 0);
-		if (IS_ERR(pd)) {
-			error = PTR_ERR(pd);
-			if (error != -ENODEV) {
-				soc_button_remove(pdev);
-				return error;
-			}
+		if (!IS_ERR(pd)) {
+			priv->children[i] = pd;
 			continue;
 		}
 
-		priv->children[i] = pd;
+		error = PTR_ERR(pd);
+		if (error == -ENODEV)
+			continue;
+
+		/*
+		 * Only propagate -EPROBE_DEFER while we have not registered
+		 * any child yet. Tearing down an already registered child to
+		 * return -EPROBE_DEFER would signal probe progress to the
+		 * driver core and get us re-probed immediately, spinning in a
+		 * tight loop (see commit bcf059578980 ("Input: soc_button_array
+		 * - partial revert of support for newer surface devices")). If
+		 * one button type already succeeded, treat a deferral of the
+		 * other as a plain skip instead.
+		 */
+		if (error == -EPROBE_DEFER && (priv->children[0] || priv->children[1]))
+			continue;
+
+		soc_button_remove(pdev);
+		return error;
 	}
 
 	if (!priv->children[0] && !priv->children[1])
