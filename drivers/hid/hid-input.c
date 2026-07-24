@@ -981,6 +981,7 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case 0x4b:  map_led (LED_MISC);     break;    /*   "Generic Indicator"        */
 		case 0x19:  map_led (LED_MAIL);     break;    /*   "Message Waiting"          */
 		case 0x4d:  map_led (LED_CHARGING); break;    /*   "External Power Connected" */
+		case 0x57:  map_led (LED_MICMUTE); break;     /*   "System Microphone Mute"  */
 
 		default: goto ignore;
 		}
