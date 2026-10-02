@@ -1188,7 +1188,7 @@ static int pac1944_reg_snapshot(struct pac1944_chip_info *info, bool do_refresh,
 		}
 
 		if (check_add_overflow(stored_value, inc, &stored_value)) {
-			if (is_negative(stored_value))
+			if (stored_value < 0)
 				info->chip_reg_data.acc_val[cnt] = S64_MIN;
 			else
 				info->chip_reg_data.acc_val[cnt] = S64_MAX;
@@ -1453,7 +1453,7 @@ static ssize_t pac1944_in_voltage_acc_raw_show(struct device *dev,
 
 	tmp_u64 = div_u64(abs(acc_voltage), samples_count);
 
-	if (is_negative(acc_voltage))
+	if (acc_voltage < 0)
 		return sysfs_emit(buf, "-%lld\n", tmp_u64);
 	else
 		return sysfs_emit(buf, "%lld\n", tmp_u64);
