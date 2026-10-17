@@ -983,13 +983,15 @@ static const struct dmi_system_id video_detect_dmi_table[] = {
 
 static bool google_cros_ec_present(void)
 {
-	return acpi_dev_found("GOOG0004") || acpi_dev_found("GOOG000C");
+	return acpi_dev_found("GOOG0004") || acpi_dev_found("GOOG000C") ||
+		acpi_dev_found("FRMWC004");
 }
 
 /*
  * Windows 8 and newer no longer use the ACPI video interface, so it often
  * does not work. So on win8+ systems prefer native brightness control.
- * Chromebooks should always prefer native backlight control.
+ * Chromebooks should always prefer native backlight control, just like
+ * Framework Computer systems with coreboot where _OSI is not present.
  */
 static bool prefer_native_over_acpi_video(void)
 {
